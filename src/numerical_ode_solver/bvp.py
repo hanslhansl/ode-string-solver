@@ -1,4 +1,4 @@
-﻿import scipy, re, sympy, numpy as np, sys, matplotlib.pyplot as plt
+import scipy, re, sympy, numpy as np, sys, matplotlib.pyplot as plt
 from ._common import *
 
 
@@ -142,7 +142,7 @@ class BVP(ODESolverBase):
 
         res = "import numpy as np, scipy\n\n"
         
-        res += self._system(self.k > 0)
+        res += self._system_string(self.k > 0)
 
         if self.k > 0:
             res += "def bc(ya, yb, p):\n"
@@ -166,7 +166,7 @@ class BVP(ODESolverBase):
 
         res += f"solution = scipy.integrate.solve_bvp(system, bc, {self.variable}, initial_guess{", parameters_initial_guess" if self.k > 0 else ""}{''.join(f', {key}={val}' for key, val in kwargs.items())})\n"
         
-        res += self._solution("x", self.k > 0)
+        res += self._solution_string("x", self.k > 0)
         res += " ".join(derivative + f"," for derivative in self._all_derivatives) + " = solution.yp\n"
         # if self.k > 0:
         #     res += " ".join(f"{p}," for p in self.parameters) + f" = solution.p\n"
@@ -174,4 +174,3 @@ class BVP(ODESolverBase):
         res += self._error_and_plot_string(plot, True)
 
         return res
-

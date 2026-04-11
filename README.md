@@ -1,3 +1,12 @@
+## Setup with uv
+
+```powershell
+uv sync --dev
+uv run pytest
+```
+
+## Examples
+
 ```Python
 import numerical_ode_solver as nos, numpy as np
 plot = True

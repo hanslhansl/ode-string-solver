@@ -113,8 +113,9 @@ class ODESolverBase:
 
         return
 
-    def _derivative_math(self, target : str, order : int):
-        return f"{target}{"'"*order}({self.variable})"
+    def _derivative_math(self, target : str, order : int, evaluate_at : str = None):
+        var = evaluate_at if evaluate_at is not None else self.variable
+        return f"{target}{"'"*order}({var})"
     def _derivative_python(self, target : str, order : int):
         if order == 0:
             return target
@@ -122,17 +123,14 @@ class ODESolverBase:
             return f"d{target}d{self.variable}"
         return f"d{order}{target}d{self.variable}{order}"
 
-    @property
     def _all_targets_python(self):
         return [self._derivative_python(target.name, order) for target in self.targets for order in range(target.highest_order)]
-    @property
-    def _all_targets_math(self):
-        return [self._derivative_math(target.name, order) for target in self.targets for order in range(target.highest_order)]
-    @property
-    def _all_derivatives(self):
+    def _all_targets_math(self, evaluate_at : str = None):
+        return [self._derivative_math(target.name, order, evaluate_at) for target in self.targets for order in range(target.highest_order)]
+    def _all_derivatives_python(self):
         return [self._derivative_python(target.name, order) for target in self.targets for order in range(1, target.highest_order + 1)]
 
-    def _system(self, with_p : bool):
+    def _system_string(self, with_p : bool):
         res = ""
 
         if with_p:
@@ -140,30 +138,29 @@ class ODESolverBase:
             res += f"{wh}{' '.join(f'{p},' for p in self.parameters)} = p\n"
         else:
             res += f"def system({self.variable}, y):\n"
-        res += f"{wh}{"".join(target + ', ' for target in self._all_targets_python)}= y\n"
+        res += f"{wh}{"".join(target + ', ' for target in self._all_targets_python())}= y\n"
         
         res += wh + "return [\n"
         for target in self.targets:
             res += "".join(f"{wh * 2}{self._derivative_python(target.name, order)},    # = {self._derivative_math(target.name, order)}\n" for order in range(1, target.highest_order))
             res += f"{wh * 2}{target.ode},    # = {self._derivative_math(target.name, target.highest_order)}\n"
-        res += wh + "]\n\n"
+        res += wh + "]"
 
         return res
-    def _solution(self, param_name : str, has_params : bool):
+    def _solution_string(self, param_name : str, has_params : bool):
         res = ""
         
-        #res += f"del {self.variable}\n"
         res += f"{self.variable} = solution.{param_name}\n"
-        res += " ".join(target + f"," for target in self._all_targets_python) + " = solution.y\n"
+        res += " ".join(target + f"," for target in self._all_targets_python()) + " = solution.y"
 
         if has_params:
-            res += " ".join(f"{p}," for p in self.parameters) + f" = solution.p\n"
+            res += "\n" + " ".join(f"{p}," for p in self.parameters) + f" = solution.p"
 
         return res
     def _error_and_plot_string(self, plot : bool, plot_highest_derivative : bool):
         res = ""
 
-        res += "\nif not solution.success:\n"
+        res += "if not solution.success:\n"
         res += wh + "# error\n"
         res += wh + "print(f\"{solution.message = }\")\n"
 
@@ -184,6 +181,6 @@ class ODESolverBase:
                     res += f"{wh}plt.grid(True)\n\n"
                     i += 1
                     
-            res += wh + "plt.show()\n"
+            res += wh + "plt.show()"
 
         return res

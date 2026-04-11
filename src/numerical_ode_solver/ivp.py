@@ -60,20 +60,40 @@ class IVP(ODESolverBase):
             E.g.: method="Radau"
         """
 
-        res = "import numpy as np, scipy\n\n"
+        kwargs = tuple((key, repr(val)) for key, val in kwargs.items())
+
+        res = f"""
+import numpy as np, scipy
+
+{self._system_string(False)}
+
+t_span = {self.interval}  # {self.variable} ∈ t_span
+
+initial_state = [
+    {"\n    ".join(f'{state},    # = {target}' for state, target in zip(self.initial_state, self._all_targets_math("0")))}
+    ]
+"""
         
-        res += self._system(False)
-
         if steps != None:
-            res += f"t_eval = np.linspace({self.interval[0]}, {self.interval[1]}, {steps})    # from, to, steps\n"
-        res += f"initial_state = [{", ".join(str(s) for s in self.initial_state)}]    # initial state for {", ".join(self._all_targets_math)}\n\n"
+            kwargs = (("t_eval", "t_eval"),) + kwargs
+            res += f"""
+t_eval = np.linspace(
+    {self.interval[0]}, # from
+    {self.interval[1]}, # to
+    {steps} # steps
+    )
+"""
 
-        res += f"solution = scipy.integrate.solve_ivp(system, {self.interval}, initial_state{f", t_eval=t_eval" if steps != None else ""}{''.join(f', {key}={val}' for key, val in kwargs.items())})\n"
+        res += f"""
+solution = scipy.integrate.solve_ivp(
+    fun=system,
+    t_span=t_span,
+    y0=initial_state,
+    {"\n    ".join(f"{key}={val}," for key, val in kwargs)}
+    )
+{self._solution_string("t", False)}
 
-        res += self._solution("t", False)
-        #for target, order in self.targets.items():
-
-        res += self._error_and_plot_string(plot, False)
+{self._error_and_plot_string(plot, False)}
+"""
 
         return res
-
