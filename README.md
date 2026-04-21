@@ -8,6 +8,12 @@ String-based ODE/BVP parsing on top of SymPy + SciPy.
 uv sync
 ```
 
+## Install from Git
+
+```bash
+python -m pip install "git+https://github.com/hanslhansl/ode-string-solver.git"
+```
+
 ## Run tests
 
 ```bash
