@@ -5,6 +5,7 @@ description = "String-based ODE/BVP parsing and SciPy solver helpers"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+  "matplotlib>=3.10.8",
   "numpy>=1.26",
   "scipy>=1.11",
   "sympy>=1.12",

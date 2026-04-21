@@ -1,3 +1,5 @@
+import numpy as np
+
 from ode_string_solver import (
     prepare_bvp_problem,
     solve_bvp_from_problem,
@@ -44,3 +46,23 @@ def test_bvp_solve_smoke():
     assert sol.success
     assert sol.y.shape[0] == 2
     assert sol.p.shape[0] == 1
+
+
+def test_bvp_solve_matches_closed_form_sine_solution():
+    problem = prepare_bvp_problem(
+        equations=["d2y/dx2 + y(x) = 0"],
+        boundary_conditions=[
+            "y(0) = 0",
+            "y(1.5707963267948966) = 1",
+        ],
+        initial_guess=["x", "1"],
+        left_boundary="0",
+        right_boundary="1.5707963267948966",
+    )
+
+    x_mesh = np.linspace(0.0, np.pi / 2.0, 41)
+    sol = solve_bvp_from_problem(problem, x_mesh=x_mesh, tol=1e-8, max_nodes=10000)
+
+    assert sol.success
+    np.testing.assert_allclose(sol.y[0], np.sin(sol.x), rtol=2e-5, atol=2e-6)
+    np.testing.assert_allclose(sol.y[1], np.cos(sol.x), rtol=2e-5, atol=2e-6)

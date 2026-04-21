@@ -847,28 +847,55 @@ def solve_ivp_from_problem(
     t_span: tuple[float, float],
     t_eval: Sequence[float] | np.ndarray | None = None,
     params: Mapping[str, float] | Sequence[float] | None = None,
+    plot: bool = False,
     **solve_kwargs: Any,
 ):
     """Solve an IVPProblem via scipy.integrate.solve_ivp."""
 
     model = build_ivp_callable(problem)
     y0_numeric = np.asarray([float(sp.N(value)) for value in problem.y0], dtype=float)
+    independent = problem.first_order_system.independent_variable
+    state_labels = [
+        _function_derivative_text(*_state_symbol_to_function_order(symbol), independent)
+        for symbol in problem.first_order_system.state_symbols
+    ]
 
     def wrapped_fun(t: float, y: np.ndarray) -> np.ndarray:
         return model.fun(t, y, params=params)
 
-    return solve_ivp(wrapped_fun, t_span=t_span, y0=y0_numeric, t_eval=t_eval, **solve_kwargs)
+    result = solve_ivp(wrapped_fun, t_span=t_span, y0=y0_numeric, t_eval=t_eval, **solve_kwargs)
+    if plot:
+        import matplotlib.pyplot as plt
+
+        plt.figure()
+        for row, label in zip(result.y, state_labels):
+            plt.plot(result.t, row, label=label)
+        plt.xlabel(str(independent))
+        plt.ylabel("state")
+        plt.title("IVP solution")
+        plt.grid(True)
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
+
+    return result
 
 
 def solve_bvp_from_problem(
     problem: BVPProblem,
     x_mesh: Sequence[float] | np.ndarray,
     params: Mapping[str, float] | Sequence[float] | None = None,
+    plot: bool = False,
     **solve_kwargs: Any,
 ):
     """Solve a BVPProblem via scipy.integrate.solve_bvp."""
 
     model = build_bvp_callables(problem)
+    independent = problem.first_order_system.independent_variable
+    state_labels = [
+        _function_derivative_text(*_state_symbol_to_function_order(symbol), independent)
+        for symbol in problem.first_order_system.state_symbols
+    ]
     x_arr = np.asarray(x_mesh, dtype=float)
     if x_arr.ndim != 1:
         raise ValueError("x_mesh must be a one-dimensional array.")
@@ -896,13 +923,38 @@ def solve_bvp_from_problem(
 
     p_guess = np.asarray([float(sp.N(value)) for value in problem.parameter_guess], dtype=float)
 
-    def wrapped_fun(x: np.ndarray, y: np.ndarray, p: np.ndarray) -> np.ndarray:
-        return model.fun(x, y, p, params=params)
+    def wrapped_fun(
+        x: np.ndarray,
+        y: np.ndarray,
+        p: np.ndarray | None = None,
+    ) -> np.ndarray:
+        p_arr = np.asarray([] if p is None else p, dtype=float)
+        return model.fun(x, y, p_arr, params=params)
 
-    def wrapped_bc(ya: np.ndarray, yb: np.ndarray, p: np.ndarray) -> np.ndarray:
-        return model.bc(ya, yb, p, params=params)
+    def wrapped_bc(
+        ya: np.ndarray,
+        yb: np.ndarray,
+        p: np.ndarray | None = None,
+    ) -> np.ndarray:
+        p_arr = np.asarray([] if p is None else p, dtype=float)
+        return model.bc(ya, yb, p_arr, params=params)
 
-    return solve_bvp(wrapped_fun, wrapped_bc, x_arr, y_guess, p=p_guess, **solve_kwargs)
+    result = solve_bvp(wrapped_fun, wrapped_bc, x_arr, y_guess, p=p_guess, **solve_kwargs)
+    if plot:
+        import matplotlib.pyplot as plt
+
+        plt.figure()
+        for row, label in zip(result.y, state_labels):
+            plt.plot(result.x, row, label=label)
+        plt.xlabel(str(independent))
+        plt.ylabel("state")
+        plt.title("BVP solution")
+        plt.grid(True)
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
+
+    return result
 
 
 def _expr_to_numpy_code(expr: sp.Expr) -> str:
@@ -960,6 +1012,11 @@ def generate_scipy_ivp_script(problem: IVPProblem, function_name: str = "solve_p
         meaning = _function_derivative_text(fn_name, state_order + 1, independent)
         rhs_code_lines.append(f"{_expr_to_numpy_code(expr)},  # = {meaning}")
     rhs_code = "\n            ".join(rhs_code_lines)
+    state_labels = [
+        _function_derivative_text(*_state_symbol_to_function_order(symbol), independent)
+        for symbol in state_symbols
+    ]
+    state_labels_code = ", ".join(repr(label) for label in state_labels)
     y0_code = ", ".join(str(float(sp.N(value))) for value in problem.y0)
     t0_code = str(float(sp.N(problem.t0)))
 
@@ -967,7 +1024,7 @@ def generate_scipy_ivp_script(problem: IVPProblem, function_name: str = "solve_p
 from scipy.integrate import solve_ivp
 
 
-def {function_name}(t_span, params=None, t_eval=None, **solve_kwargs):
+def {function_name}(t_span, params=None, t_eval=None, plot=False, **solve_kwargs):
     params = {{}} if params is None else dict(params)
 {parameter_block}
 
@@ -982,7 +1039,23 @@ def {function_name}(t_span, params=None, t_eval=None, **solve_kwargs):
     if abs(float(t_span[0]) - t0) > 1e-12:
         raise ValueError(f"t_span start {{t_span[0]}} does not match initial condition point {{t0}}")
 
-    return solve_ivp(fun, t_span=t_span, y0=y0, t_eval=t_eval, **solve_kwargs)
+    result = solve_ivp(fun, t_span=t_span, y0=y0, t_eval=t_eval, **solve_kwargs)
+    if plot:
+        import matplotlib.pyplot as plt
+
+        state_labels = [{state_labels_code}]
+        plt.figure()
+        for row, label in zip(result.y, state_labels):
+            plt.plot(result.t, row, label=label)
+        plt.xlabel("{str(independent)}")
+        plt.ylabel("state")
+        plt.title("IVP solution")
+        plt.grid(True)
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
+
+    return result
 '''
     return script
 
@@ -1063,6 +1136,11 @@ def generate_scipy_bvp_script(problem: BVPProblem, function_name: str = "solve_p
             f"{_expr_to_numpy_code(expr)},  # = {sp.sstr(human_expr)}"
         )
     bc_code = "\n            ".join(bc_code_lines)
+    state_labels = [
+        _function_derivative_text(*_state_symbol_to_function_order(symbol), independent)
+        for symbol in state_symbols
+    ]
+    state_labels_code = ", ".join(repr(label) for label in state_labels)
 
     guess_code = ",\n            ".join(_expr_to_numpy_code(expr) for expr in problem.initial_guess_expressions)
     p_guess_code = ", ".join(str(float(sp.N(value))) for value in problem.parameter_guess)
@@ -1071,7 +1149,7 @@ def generate_scipy_bvp_script(problem: BVPProblem, function_name: str = "solve_p
 from scipy.integrate import solve_bvp
 
 
-def {function_name}(x_mesh, params=None, **solve_kwargs):
+def {function_name}(x_mesh, params=None, plot=False, **solve_kwargs):
     params = {{}} if params is None else dict(params)
 {"\n".join(fun_fixed_lines)}
     x_mesh = np.asarray(x_mesh, dtype=float)
@@ -1093,6 +1171,22 @@ def {function_name}(x_mesh, params=None, **solve_kwargs):
     ], dtype=float)
     p_guess = np.array([{p_guess_code}], dtype=float)
 
-    return solve_bvp(fun, bc, x_mesh, y_guess, p=p_guess, **solve_kwargs)
+    result = solve_bvp(fun, bc, x_mesh, y_guess, p=p_guess, **solve_kwargs)
+    if plot:
+        import matplotlib.pyplot as plt
+
+        state_labels = [{state_labels_code}]
+        plt.figure()
+        for row, label in zip(result.y, state_labels):
+            plt.plot(result.x, row, label=label)
+        plt.xlabel("{str(independent)}")
+        plt.ylabel("state")
+        plt.title("BVP solution")
+        plt.grid(True)
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
+
+    return result
 '''
     return script

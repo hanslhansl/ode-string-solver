@@ -20,16 +20,17 @@ User-facing examples are in `examples/`:
 
 - `examples/ivp_example.py`
 - `examples/bvp_example.py`
+- `examples/generate_script_example.py` (only generates Python solver strings; does not solve)
 
 Run them with:
 
 ```bash
 uv run python examples/ivp_example.py
 uv run python examples/bvp_example.py
+uv run python examples/generate_script_example.py
 ```
 
-Tests in `tests/` are for verification and regression protection.
-They are not a substitute for usage examples.
+Tests for verification and regression protection are located in `tests/`.
 
 ## Basic API
 
