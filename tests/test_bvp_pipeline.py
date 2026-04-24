@@ -87,3 +87,25 @@ def test_bvp_method_api_smoke():
 
     script = problem.generate_scipy_script(function_name="solve_it")
     assert "def solve_it(" in script
+
+
+def test_bvp_callable_parameter_and_builtin_math_function_work_together():
+    problem = BVPProblem.from_strings(
+        equations=["y'(x) - a(x)*cos(x) = 0"],
+        boundary_conditions=[
+            "y(0) = 0",
+        ],
+        initial_guess=["0"],
+        left_boundary="0",
+        right_boundary="1",
+    )
+
+    sol = problem.solve(
+        x_mesh=np.linspace(0.0, 1.0, 21),
+        params={"a": lambda x: 1.0},
+        tol=1e-8,
+        max_nodes=10000,
+    )
+
+    assert sol.success
+    np.testing.assert_allclose(sol.y[0], np.sin(sol.x), rtol=2e-5, atol=2e-6)

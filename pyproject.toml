@@ -1,6 +1,6 @@
 [project]
 name = "ode-string-solver"
-version = "0.1.0"
+version = "0.1.1"
 description = "String-based ODE/BVP parsing and SciPy solver helpers"
 readme = "README.md"
 requires-python = ">=3.10"

@@ -1,9 +1,11 @@
 import numpy as np
 
 from ode_string_solver import BVPProblem
+from ode_string_solver.solver import IVPProblem
 
 
 if __name__ == "__main__":
+    
     problem = BVPProblem.from_strings(
         equations=["d2y/dx2 + q*y(x) = 0"],
         boundary_conditions=[

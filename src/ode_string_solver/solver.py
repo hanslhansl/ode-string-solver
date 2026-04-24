@@ -8,6 +8,7 @@ import numpy as np
 from scipy.integrate import solve_bvp, solve_ivp
 
 import sympy as sp
+from sympy.core.function import AppliedUndef
 from sympy.parsing.sympy_parser import (
     convert_xor,
     implicit_multiplication_application,
@@ -19,6 +20,11 @@ from sympy.printing.numpy import NumPyPrinter
 
 TRANSFORMATIONS = standard_transformations + (implicit_multiplication_application, convert_xor)
 IDENTIFIER = r"[A-Za-z_]\w*"
+NUMPY_CALLABLE_NAMES = {
+    name
+    for name in dir(np)
+    if callable(getattr(np, name, None))
+}
 
 
 @dataclass(frozen=True)
@@ -802,6 +808,44 @@ def _resolve_parameter_values(
     return [float(value) for value in params]
 
 
+def _ordered_callable_symbols(expressions: Sequence[sp.Expr]) -> list[Any]:
+    callable_set: set[Any] = set()
+    for expr in expressions:
+        for applied in expr.atoms(AppliedUndef):
+            if str(applied.func) in NUMPY_CALLABLE_NAMES:
+                continue
+            callable_set.add(applied.func)
+    return sorted(callable_set, key=lambda func: str(func))
+
+
+def _resolve_callable_values(
+    callable_symbols: Sequence[Any],
+    params: Mapping[str, float] | Sequence[float] | None,
+) -> list[Callable[..., Any]]:
+    if not callable_symbols:
+        return []
+
+    if not isinstance(params, Mapping):
+        names = [str(symbol) for symbol in callable_symbols]
+        raise ValueError(
+            "Function-valued parameters require a mapping-style 'params' with callables "
+            f"for {names}."
+        )
+
+    values: list[Callable[..., Any]] = []
+    for symbol in callable_symbols:
+        name = str(symbol)
+        if name not in params:
+            raise ValueError(f"Missing callable parameter for '{name}'.")
+        value = params[name]
+        if not callable(value):
+            raise ValueError(
+                f"Parameter '{name}' must be callable for function term '{name}(...)'."
+            )
+        values.append(cast(Callable[..., Any], value))
+    return values
+
+
 def _build_ivp_callable(problem: IVPProblem) -> IVPCallableModel:
     """Build a numeric RHS callable compatible with scipy.integrate.solve_ivp."""
 
@@ -811,8 +855,9 @@ def _build_ivp_callable(problem: IVPProblem) -> IVPCallableModel:
 
     excluded = {independent, *state_symbols}
     parameter_symbols = _ordered_parameter_symbols(expressions, excluded)
+    callable_symbols = _ordered_callable_symbols(expressions)
 
-    args = [independent, *state_symbols, *parameter_symbols]
+    args = [independent, *state_symbols, *parameter_symbols, *callable_symbols]
     rhs_lambda = sp.lambdify(args, expressions, modules="numpy")
     state_count = len(state_symbols)
 
@@ -829,7 +874,8 @@ def _build_ivp_callable(problem: IVPProblem) -> IVPCallableModel:
             )
 
         parameter_values = _resolve_parameter_values(parameter_symbols, params)
-        values = rhs_lambda(float(t), *y_arr.tolist(), *parameter_values)
+        callable_values = _resolve_callable_values(callable_symbols, params)
+        values = rhs_lambda(float(t), *y_arr.tolist(), *parameter_values, *callable_values)
         return np.asarray(values, dtype=float).reshape(state_count)
 
     return IVPCallableModel(fun=fun, parameter_symbols=parameter_symbols)
@@ -856,13 +902,21 @@ def _build_bvp_callables(problem: BVPProblem) -> BVPCallableModel:
         set(fixed_fun_parameters) | set(fixed_bc_parameters),
         key=lambda symbol: str(symbol),
     )
+    callable_symbols = _ordered_callable_symbols([*rhs_expressions, *bc_expressions])
 
-    fun_args = [independent, *state_symbols, *unknown_parameter_symbols, *fixed_parameter_symbols]
+    fun_args = [
+        independent,
+        *state_symbols,
+        *unknown_parameter_symbols,
+        *fixed_parameter_symbols,
+        *callable_symbols,
+    ]
     bc_args = [
         *problem.left_state_symbols,
         *problem.right_state_symbols,
         *unknown_parameter_symbols,
         *fixed_parameter_symbols,
+        *callable_symbols,
     ]
 
     fun_lambda = sp.lambdify(fun_args, rhs_expressions, modules="numpy")
@@ -891,12 +945,14 @@ def _build_bvp_callables(problem: BVPProblem) -> BVPCallableModel:
             )
 
         fixed_values = _resolve_parameter_values(fixed_parameter_symbols, params)
+        callable_values = _resolve_callable_values(callable_symbols, params)
         x_arr = np.asarray(x, dtype=float)
         values = fun_lambda(
             x_arr,
             *[y_arr[idx] for idx in range(state_count)],
             *p_arr.tolist(),
             *fixed_values,
+            *callable_values,
         )
         return np.asarray(values, dtype=float).reshape(state_count, -1)
 
@@ -922,11 +978,13 @@ def _build_bvp_callables(problem: BVPProblem) -> BVPCallableModel:
             )
 
         fixed_values = _resolve_parameter_values(fixed_parameter_symbols, params)
+        callable_values = _resolve_callable_values(callable_symbols, params)
         values = bc_lambda(
             *ya_arr.tolist(),
             *yb_arr.tolist(),
             *p_arr.tolist(),
             *fixed_values,
+            *callable_values,
         )
         return np.asarray(values, dtype=float).reshape(-1)
 
