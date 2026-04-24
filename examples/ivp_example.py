@@ -1,10 +1,10 @@
 import numpy as np
 
-from ode_string_solver import prepare_ivp_problem, solve_ivp_from_problem
+from ode_string_solver import IVPProblem
 
 
 if __name__ == "__main__":
-    problem = prepare_ivp_problem(
+    problem = IVPProblem.from_strings(
         equations=[
             "d2 y / dt2 + c*dy/dt + k*y(t) = 0",
             "z'(t) - y(t) = 0",
@@ -16,8 +16,7 @@ if __name__ == "__main__":
         ],
     )
 
-    sol = solve_ivp_from_problem(
-        problem,
+    sol = problem.solve(
         t_span=(0.0, 6.0),
         t_eval=np.linspace(0.0, 6.0, 40),
         params={"c": 0.3, "k": 4.0},

@@ -53,6 +53,50 @@ class IVPProblem:
     t0: sp.Expr
     y0: list[sp.Expr]
 
+    @classmethod
+    def from_strings(
+        cls,
+        equations: Sequence[str],
+        initial_conditions: Sequence[str],
+        namespace: Mapping[str, Any] | None = None,
+    ) -> IVPProblem:
+        """Build an IVPProblem from user-facing ODE and IC strings."""
+
+        return _prepare_ivp_problem(
+            equations=equations,
+            initial_conditions=initial_conditions,
+            namespace=namespace,
+        )
+
+    def build_callable(self) -> IVPCallableModel:
+        """Build a numeric callable model compatible with scipy.solve_ivp."""
+
+        return _build_ivp_callable(self)
+
+    def solve(
+        self,
+        t_span: tuple[float, float],
+        t_eval: Sequence[float] | np.ndarray | None = None,
+        params: Mapping[str, float] | Sequence[float] | None = None,
+        plot: bool = False,
+        **solve_kwargs: Any,
+    ) -> Any:
+        """Solve this IVPProblem using scipy.integrate.solve_ivp."""
+
+        return _solve_ivp_from_problem(
+            self,
+            t_span=t_span,
+            t_eval=t_eval,
+            params=params,
+            plot=plot,
+            **solve_kwargs,
+        )
+
+    def generate_scipy_script(self, function_name: str = "solve_problem") -> str:
+        """Generate a standalone SciPy IVP script for this problem."""
+
+        return _generate_scipy_ivp_script(self, function_name=function_name)
+
 
 @dataclass(frozen=True)
 class BVPProblem:
@@ -68,6 +112,58 @@ class BVPProblem:
     initial_guess_expressions: list[sp.Expr]
     parameter_symbols: list[sp.Symbol]
     parameter_guess: list[sp.Expr]
+
+    @classmethod
+    def from_strings(
+        cls,
+        equations: Sequence[str],
+        boundary_conditions: Sequence[str],
+        initial_guess: Sequence[str] | Mapping[str, str],
+        left_boundary: str,
+        right_boundary: str,
+        parameter_names: Sequence[str] | None = None,
+        parameter_guess: Sequence[str] | None = None,
+        namespace: Mapping[str, Any] | None = None,
+    ) -> BVPProblem:
+        """Build a BVPProblem from user-facing ODE and BC strings."""
+
+        return _prepare_bvp_problem(
+            equations=equations,
+            boundary_conditions=boundary_conditions,
+            initial_guess=initial_guess,
+            left_boundary=left_boundary,
+            right_boundary=right_boundary,
+            parameter_names=parameter_names,
+            parameter_guess=parameter_guess,
+            namespace=namespace,
+        )
+
+    def build_callables(self) -> BVPCallableModel:
+        """Build numeric fun/bc callables compatible with scipy.solve_bvp."""
+
+        return _build_bvp_callables(self)
+
+    def solve(
+        self,
+        x_mesh: Sequence[float] | np.ndarray,
+        params: Mapping[str, float] | Sequence[float] | None = None,
+        plot: bool = False,
+        **solve_kwargs: Any,
+    ) -> Any:
+        """Solve this BVPProblem using scipy.integrate.solve_bvp."""
+
+        return _solve_bvp_from_problem(
+            self,
+            x_mesh=x_mesh,
+            params=params,
+            plot=plot,
+            **solve_kwargs,
+        )
+
+    def generate_scipy_script(self, function_name: str = "solve_problem") -> str:
+        """Generate a standalone SciPy BVP script for this problem."""
+
+        return _generate_scipy_bvp_script(self, function_name=function_name)
 
 
 @dataclass(frozen=True)
@@ -330,7 +426,7 @@ def _expr_diff(left: sp.Expr, right: sp.Expr) -> sp.Expr:
     )
 
 
-def parse_differential_system(
+def _parse_differential_system(
     equations: Sequence[str],
     namespace: Mapping[str, Any] | None = None,
 ) -> ParsedDifferentialSystem:
@@ -367,15 +463,15 @@ def parse_differential_system(
     )
 
 
-def prepare_ivp_problem(
+def _prepare_ivp_problem(
     equations: Sequence[str],
     initial_conditions: Sequence[str],
     namespace: Mapping[str, Any] | None = None,
 ) -> IVPProblem:
     """Parse ODE+IC strings into first-order state initial values."""
 
-    parsed = parse_differential_system(equations, namespace=namespace)
-    first_order = decouple_to_first_order(parsed)
+    parsed = _parse_differential_system(equations, namespace=namespace)
+    first_order = _decouple_to_first_order(parsed)
     state_lookup = _build_state_lookup(first_order)
 
     if len(initial_conditions) != len(first_order.state_symbols):
@@ -461,7 +557,7 @@ def _parse_bvp_initial_guess(
     return [_parse_scalar_expr(expr, namespace) for expr in initial_guess]
 
 
-def prepare_bvp_problem(
+def _prepare_bvp_problem(
     equations: Sequence[str],
     boundary_conditions: Sequence[str],
     initial_guess: Sequence[str] | Mapping[str, str],
@@ -473,8 +569,8 @@ def prepare_bvp_problem(
 ) -> BVPProblem:
     """Parse ODE+BVP strings into first-order residual form for solve_bvp."""
 
-    parsed = parse_differential_system(equations, namespace=namespace)
-    first_order = decouple_to_first_order(parsed)
+    parsed = _parse_differential_system(equations, namespace=namespace)
+    first_order = _decouple_to_first_order(parsed)
     state_lookup = _build_state_lookup(first_order)
     independent_variable = first_order.independent_variable
 
@@ -580,7 +676,7 @@ def prepare_bvp_problem(
     )
 
 
-def decouple_to_first_order(system: ParsedDifferentialSystem) -> FirstOrderSystem:
+def _decouple_to_first_order(system: ParsedDifferentialSystem) -> FirstOrderSystem:
     """Convert parsed higher-order ODEs into a first-order state-space system."""
 
     independent_variable = sp.Symbol(system.independent_variable)
@@ -706,7 +802,7 @@ def _resolve_parameter_values(
     return [float(value) for value in params]
 
 
-def build_ivp_callable(problem: IVPProblem) -> IVPCallableModel:
+def _build_ivp_callable(problem: IVPProblem) -> IVPCallableModel:
     """Build a numeric RHS callable compatible with scipy.integrate.solve_ivp."""
 
     independent = problem.first_order_system.independent_variable
@@ -739,7 +835,7 @@ def build_ivp_callable(problem: IVPProblem) -> IVPCallableModel:
     return IVPCallableModel(fun=fun, parameter_symbols=parameter_symbols)
 
 
-def build_bvp_callables(problem: BVPProblem) -> BVPCallableModel:
+def _build_bvp_callables(problem: BVPProblem) -> BVPCallableModel:
     """Build numeric fun/bc callables compatible with scipy.integrate.solve_bvp."""
 
     independent = problem.first_order_system.independent_variable
@@ -842,7 +938,7 @@ def build_bvp_callables(problem: BVPProblem) -> BVPCallableModel:
     )
 
 
-def solve_ivp_from_problem(
+def _solve_ivp_from_problem(
     problem: IVPProblem,
     t_span: tuple[float, float],
     t_eval: Sequence[float] | np.ndarray | None = None,
@@ -852,7 +948,7 @@ def solve_ivp_from_problem(
 ):
     """Solve an IVPProblem via scipy.integrate.solve_ivp."""
 
-    model = build_ivp_callable(problem)
+    model = _build_ivp_callable(problem)
     y0_numeric = np.asarray([float(sp.N(value)) for value in problem.y0], dtype=float)
     independent = problem.first_order_system.independent_variable
     state_labels = [
@@ -881,7 +977,7 @@ def solve_ivp_from_problem(
     return result
 
 
-def solve_bvp_from_problem(
+def _solve_bvp_from_problem(
     problem: BVPProblem,
     x_mesh: Sequence[float] | np.ndarray,
     params: Mapping[str, float] | Sequence[float] | None = None,
@@ -890,7 +986,7 @@ def solve_bvp_from_problem(
 ):
     """Solve a BVPProblem via scipy.integrate.solve_bvp."""
 
-    model = build_bvp_callables(problem)
+    model = _build_bvp_callables(problem)
     independent = problem.first_order_system.independent_variable
     state_labels = [
         _function_derivative_text(*_state_symbol_to_function_order(symbol), independent)
@@ -982,7 +1078,7 @@ def _function_derivative_at_point_text(
     return f"{function_name}{primes}({sp.sstr(point_expr)})"
 
 
-def generate_scipy_ivp_script(problem: IVPProblem, function_name: str = "solve_problem") -> str:
+def _generate_scipy_ivp_script(problem: IVPProblem, function_name: str = "solve_problem") -> str:
     """Generate a standalone SciPy IVP solver script as a Python string."""
 
     state_symbols = problem.first_order_system.state_symbols
@@ -1060,7 +1156,7 @@ def {function_name}(t_span, params=None, t_eval=None, plot=False, **solve_kwargs
     return script
 
 
-def generate_scipy_bvp_script(problem: BVPProblem, function_name: str = "solve_problem") -> str:
+def _generate_scipy_bvp_script(problem: BVPProblem, function_name: str = "solve_problem") -> str:
     """Generate a standalone SciPy BVP solver script as a Python string."""
 
     state_symbols = problem.first_order_system.state_symbols

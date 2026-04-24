@@ -1,10 +1,10 @@
 import numpy as np
 
-from ode_string_solver import prepare_bvp_problem, solve_bvp_from_problem
+from ode_string_solver import BVPProblem
 
 
 if __name__ == "__main__":
-    problem = prepare_bvp_problem(
+    problem = BVPProblem.from_strings(
         equations=["d2y/dx2 + q*y(x) = 0"],
         boundary_conditions=[
             "y(0) = 0",
@@ -18,7 +18,7 @@ if __name__ == "__main__":
         parameter_guess=["10"],
     )
 
-    sol = solve_bvp_from_problem(problem, x_mesh=np.linspace(0.0, 1.0, 20), max_nodes=10000)
+    sol = problem.solve(x_mesh=np.linspace(0.0, 1.0, 20), max_nodes=10000)
 
     print("success:", sol.success)
     print("estimated q:", sol.p)

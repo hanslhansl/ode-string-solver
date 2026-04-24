@@ -38,14 +38,30 @@ uv run python examples/generate_script_example.py
 
 Tests for verification and regression protection are located in `tests/`.
 
-## Basic API
+## API
 
 ```python
-from ode_string_solver import prepare_ivp_problem, solve_ivp_from_problem
+from ode_string_solver import IVPProblem
 
-problem = prepare_ivp_problem(
+problem = IVPProblem.from_strings(
     equations=["d2 y / dt2 + c*dy/dt + k*y(t) = 0"],
     initial_conditions=["y(0)=1", "y'(0)=0"],
 )
-sol = solve_ivp_from_problem(problem, t_span=(0.0, 5.0), params={"c": 0.3, "k": 2.0})
+
+sol = problem.solve(t_span=(0.0, 5.0), params={"c": 0.3, "k": 2.0})
+```
+
+```python
+from ode_string_solver import BVPProblem
+import numpy as np
+
+problem = BVPProblem.from_strings(
+    equations=["d2y/dx2 + y(x) = 0"],
+    boundary_conditions=["y(0)=0", "y(1.5707963267948966)=1"],
+    initial_guess=["x", "1"],
+    left_boundary="0",
+    right_boundary="1.5707963267948966",
+)
+
+sol = problem.solve(x_mesh=np.linspace(0.0, np.pi / 2.0, 41))
 ```
