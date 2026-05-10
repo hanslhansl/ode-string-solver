@@ -1,6 +1,6 @@
 # ode-string-solver
 
-String-based ODE/BVP parsing on top of SymPy + SciPy.
+String-based ODE/BVP parsing and solving on top of SymPy + SciPy.
 
 ## Install from Git
 
