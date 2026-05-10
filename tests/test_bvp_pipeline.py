@@ -5,15 +5,13 @@ from ode_string_solver import BVPProblem
 
 def test_bvp_prepare_with_implicit_bc_and_parameter():
     problem = BVPProblem.from_strings(
-        equations=["d2y/dx2 + q*y(x) = 0"],
+        equations=["y''(x) + q*y(x) = 0"],
         boundary_conditions=[
-            "y(0) = 0",
-            "y(1)^2 = 2",
-            "y'(0) - q = 0",
+            "y(a) = 0",
+            "y(b)**2 = 2",
+            "y'(a) - q = 0",
         ],
         initial_guess=["x", "1"],
-        left_boundary="0",
-        right_boundary="1",
         parameter_names=["q"],
         parameter_guess=["10"],
     )
@@ -25,15 +23,13 @@ def test_bvp_prepare_with_implicit_bc_and_parameter():
 
 def test_bvp_solve_smoke():
     problem = BVPProblem.from_strings(
-        equations=["d2y/dx2 + q*y(x) = 0"],
+        equations=["y''(x) + q*y(x) = 0"],
         boundary_conditions=[
-            "y(0) = 0",
-            "y(1)^2 = 2",
-            "y'(0) - q = 0",
+            "y(a) = 0",
+            "y(b)**2 = 2",
+            "y'(a) - q = 0",
         ],
         initial_guess=["x", "1"],
-        left_boundary="0",
-        right_boundary="1",
         parameter_names=["q"],
         parameter_guess=["10"],
     )
@@ -47,14 +43,12 @@ def test_bvp_solve_smoke():
 
 def test_bvp_solve_matches_closed_form_sine_solution():
     problem = BVPProblem.from_strings(
-        equations=["d2y/dx2 + y(x) = 0"],
+        equations=["y''(x) + y(x) = 0"],
         boundary_conditions=[
-            "y(0) = 0",
-            "y(1.5707963267948966) = 1",
+            "y(a) = 0",
+            "y(b) = 1",
         ],
         initial_guess=["x", "1"],
-        left_boundary="0",
-        right_boundary="1.5707963267948966",
     )
 
     x_mesh = np.linspace(0.0, np.pi / 2.0, 41)
@@ -67,14 +61,12 @@ def test_bvp_solve_matches_closed_form_sine_solution():
 
 def test_bvp_method_api_smoke():
     problem = BVPProblem.from_strings(
-        equations=["d2y/dx2 + y(x) = 0"],
+        equations=["y''(x) + y(x) = 0"],
         boundary_conditions=[
-            "y(0) = 0",
-            "y(1.5707963267948966) = 1",
+            "y(a) = 0",
+            "y(b) = 1",
         ],
         initial_guess=["x", "1"],
-        left_boundary="0",
-        right_boundary="1.5707963267948966",
     )
 
     model = problem.build_callables()
@@ -93,16 +85,16 @@ def test_bvp_callable_parameter_and_builtin_math_function_work_together():
     problem = BVPProblem.from_strings(
         equations=["y'(x) - a(x)*cos(x) = 0"],
         boundary_conditions=[
-            "y(0) = 0",
+            "y(x0) = 0",
         ],
         initial_guess=["0"],
-        left_boundary="0",
-        right_boundary="1",
+        left_symbol="x0",
+        right_symbol="x1",
     )
 
     sol = problem.solve(
         x_mesh=np.linspace(0.0, 1.0, 21),
-        params={"a": lambda x: 1.0},
+        namespace={"a": lambda x: 1.0, "cos": np.cos, "sin": np.sin},
         tol=1e-8,
         max_nodes=10000,
     )

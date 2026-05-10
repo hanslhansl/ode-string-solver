@@ -44,23 +44,23 @@ Tests for verification and regression protection are located in `tests/`.
 from ode_string_solver import IVPProblem
 
 problem = IVPProblem.from_strings(
-    equations=["d2 y / dt2 + c*dy/dt + k*y(t) = 0"],
-    initial_conditions=["y(0)=1", "y'(0)=0"],
+    equations=["y''(t) + c*y'(t) + k*y(t) = 0"],
+    initial_conditions=["y(t0)=1", "y'(t0)=0"],
 )
 
-sol = problem.solve(t_span=(0.0, 5.0), params={"c": 0.3, "k": 2.0})
+sol = problem.solve(t_span=(0.0, 5.0), namespace={"c": 0.3, "k": 2.0})
 ```
+
+IC/BC points must use boundary symbols (defaults: `t0` for IVP, `a`/`b` for BVP). Provide any constants or functions referenced in the ODE via the `namespace` argument when solving.
 
 ```python
 from ode_string_solver import BVPProblem
 import numpy as np
 
 problem = BVPProblem.from_strings(
-    equations=["d2y/dx2 + y(x) = 0"],
-    boundary_conditions=["y(0)=0", "y(1.5707963267948966)=1"],
+    equations=["y''(x) + y(x) = 0"],
+    boundary_conditions=["y(a)=0", "y(b)=1"],
     initial_guess=["x", "1"],
-    left_boundary="0",
-    right_boundary="1.5707963267948966",
 )
 
 sol = problem.solve(x_mesh=np.linspace(0.0, np.pi / 2.0, 41))

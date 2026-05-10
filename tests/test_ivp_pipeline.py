@@ -6,18 +6,18 @@ from ode_string_solver import IVPProblem
 def test_ivp_prepare_and_callable_eval():
     problem = IVPProblem.from_strings(
         equations=[
-            "d2 y / dt2 + c*dy/dt + k*y(t) = 0",
+            "y''(t) + c*y'(t) + k*y(t) = 0",
             "z'(t) - y(t) = 0",
         ],
         initial_conditions=[
-            "y(0) = 1",
-            "y'(0) = 0",
-            "z(0) = 2",
+            "y(t0) = 1",
+            "y'(t0) = 0",
+            "z(t0) = 2",
         ],
     )
 
-    model = problem.build_callable()
-    out = model.fun(0.0, [1.0, 0.0, 2.0], params={"c": 0.3, "k": 4.0})
+    model = problem.build_callable(namespace={"c": 0.3, "k": 4.0})
+    out = model.fun(0.0, [1.0, 0.0, 2.0])
 
     assert out.shape == (3,)
     assert out[0] == 0.0
@@ -27,8 +27,8 @@ def test_ivp_prepare_and_callable_eval():
 
 def test_ivp_solve_smoke():
     problem = IVPProblem.from_strings(
-        equations=["d2 y / dt2 + y(t) = 0"],
-        initial_conditions=["y(0) = 1", "y'(0) = 0"],
+        equations=["y''(t) + y(t) = 0"],
+        initial_conditions=["y(t0) = 1", "y'(t0) = 0"],
     )
     sol = problem.solve(
         t_span=(0.0, 2.0),
@@ -43,10 +43,10 @@ def test_ivp_solve_smoke():
     np.testing.assert_allclose(sol.y[1], -np.sin(sol.t), rtol=2e-6, atol=2e-8)
 
 
-def test_ivp_callable_parameter_function_accessible_via_params_mapping():
+def test_ivp_callable_function_accessible_via_namespace():
     problem = IVPProblem.from_strings(
         equations=["y'(t) - a(t) = 0"],
-        initial_conditions=["y(0) = 0"],
+        initial_conditions=["y(t0) = 0"],
     )
 
     def a(t: float) -> float:
@@ -55,7 +55,7 @@ def test_ivp_callable_parameter_function_accessible_via_params_mapping():
     sol = problem.solve(
         t_span=(0.0, 1.0),
         t_eval=np.linspace(0.0, 1.0, 11),
-        params={"a": a},
+        namespace={"a": a},
         rtol=1e-10,
         atol=1e-12,
     )
@@ -64,16 +64,16 @@ def test_ivp_callable_parameter_function_accessible_via_params_mapping():
     np.testing.assert_allclose(sol.y[0], 2.0 * sol.t, rtol=1e-7, atol=1e-9)
 
 
-def test_ivp_callable_parameter_and_builtin_math_function_work_together():
+def test_ivp_callable_and_builtin_math_function_work_together():
     problem = IVPProblem.from_strings(
         equations=["y'(t) - a(t)*cos(t) = 0"],
-        initial_conditions=["y(0) = 0"],
+        initial_conditions=["y(t0) = 0"],
     )
 
     sol = problem.solve(
         t_span=(0.0, 1.0),
         t_eval=np.linspace(0.0, 1.0, 51),
-        params={"a": lambda t: 1.0},
+        namespace={"a": lambda t: 1.0, "cos": np.cos},
         rtol=1e-10,
         atol=1e-12,
     )
@@ -84,8 +84,8 @@ def test_ivp_callable_parameter_and_builtin_math_function_work_together():
 
 def test_ivp_method_api_smoke():
     problem = IVPProblem.from_strings(
-        equations=["d2 y / dt2 + y(t) = 0"],
-        initial_conditions=["y(0) = 1", "y'(0) = 0"],
+        equations=["y''(t) + y(t) = 0"],
+        initial_conditions=["y(t0) = 1", "y'(t0) = 0"],
     )
 
     model = problem.build_callable()

@@ -1,21 +1,17 @@
 import numpy as np
 
 from ode_string_solver import BVPProblem
-from ode_string_solver.solver import IVPProblem
 
 
 if __name__ == "__main__":
-    
     problem = BVPProblem.from_strings(
-        equations=["d2y/dx2 + q*y(x) = 0"],
+        equations=["y''(x) + q*y(x) = 0"],
         boundary_conditions=[
-            "y(0) = 0",
-            "y(1)^2 = 2",
-            "y'(0) - q = 0",
+            "y(a) = 0",
+            "y(b)**2 = 2",
+            "y'(a) - q = 0",
         ],
         initial_guess=["x", "1"],
-        left_boundary="0",
-        right_boundary="1",
         parameter_names=["q"],
         parameter_guess=["10"],
     )
