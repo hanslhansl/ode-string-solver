@@ -83,7 +83,7 @@ def test_bvp_method_api_smoke():
 
 def test_bvp_callable_parameter_and_builtin_math_function_work_together():
     problem = BVPProblem.from_strings(
-        equations=["y'(x) - a(x)*cos(x) = 0"],
+        equations=["y'(x) - a(c, d)*cos(x) = 0"],
         boundary_conditions=[
             "y(x0) = 0",
         ],
@@ -94,7 +94,7 @@ def test_bvp_callable_parameter_and_builtin_math_function_work_together():
 
     sol = problem.solve(
         x_mesh=np.linspace(0.0, 1.0, 21),
-        namespace={"a": lambda x: 1.0, "cos": np.cos, "sin": np.sin},
+        namespace={"a": lambda x, y: 1.0, "cos": np.cos, "sin": np.sin, "c" : 12., "d" : 13.},
         tol=1e-8,
         max_nodes=10000,
     )
