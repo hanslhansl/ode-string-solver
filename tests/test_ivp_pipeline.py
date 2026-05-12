@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from ode_string_solver import IVPProblem
 
@@ -102,3 +103,19 @@ def test_ivp_method_api_smoke():
 
     script = problem.generate_scipy_script(function_name="solve_it")
     assert "def solve_it(" in script
+
+
+def test_ivp_ode_parse_error_message_is_user_facing():
+    with pytest.raises(ValueError, match=r"Could not parse ODE equation"):
+        IVPProblem.from_strings(
+            equations=["y''(t) + * y(t) = 0"],
+            initial_conditions=["y(t0) = 1", "y'(t0) = 0"],
+        )
+
+
+def test_ivp_ic_rhs_parse_error_message_is_user_facing():
+    with pytest.raises(ValueError, match=r"Could not parse initial condition RHS"):
+        IVPProblem.from_strings(
+            equations=["y''(t) + y(t) = 0"],
+            initial_conditions=["y(t0) = 1+", "y'(t0) = 0"],
+        )

@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from ode_string_solver import BVPProblem
 
@@ -101,3 +102,21 @@ def test_bvp_callable_parameter_and_builtin_math_function_work_together():
 
     assert sol.success
     np.testing.assert_allclose(sol.y[0], np.sin(sol.x), rtol=2e-5, atol=2e-6)
+
+
+def test_bvp_bc_parse_error_message_is_user_facing():
+    with pytest.raises(ValueError, match=r"Could not parse boundary condition"):
+        BVPProblem.from_strings(
+            equations=["y''(x) + y(x) = 0"],
+            boundary_conditions=["y(a) =", "y(b) = 1"],
+            initial_guess=["x", "1"],
+        )
+
+
+def test_bvp_guess_parse_error_message_is_user_facing():
+    with pytest.raises(ValueError, match=r"Could not parse BVP initial guess"):
+        BVPProblem.from_strings(
+            equations=["y''(x) + y(x) = 0"],
+            boundary_conditions=["y(a) = 0", "y(b) = 1"],
+            initial_guess=["x+", "1"],
+        )

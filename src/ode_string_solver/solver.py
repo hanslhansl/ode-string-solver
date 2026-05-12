@@ -100,7 +100,10 @@ class IVPProblem:
                     f"Initial condition point must be '{t0_symbol}'. Got '{point_text}'."
                 )
             point_expr = sp.Symbol(t0_symbol)
-            rhs_expr = _parse_scalar_expr(rhs)
+            rhs_expr = _parse_scalar_expr(
+                rhs,
+                context=f"initial condition RHS in '{condition}'",
+            )
             key = (function_name, order)
 
             if key not in state_lookup:
@@ -371,7 +374,13 @@ class BVPProblem:
         if parameter_names is not None and parameter_guess is not None:
             if len(parameter_names) != len(parameter_guess):
                 raise ValueError("parameter_names and parameter_guess must have the same length.")
-            parameter_guess_exprs = [_parse_scalar_expr(expr) for expr in parameter_guess]
+            parameter_guess_exprs = [
+                _parse_scalar_expr(
+                    expr,
+                    context=f"parameter guess for '{name}'",
+                )
+                for name, expr in zip(parameter_names, parameter_guess)
+            ]
         elif parameter_names is not None and parameter_guess is None:
             raise ValueError("parameter_guess is required when parameter_names are provided.")
         elif parameter_names is None and parameter_guess is not None:
@@ -401,7 +410,11 @@ class BVPProblem:
                 replace_prime_with_point,
                 condition,
             )
-            residual = _parse_residual_equation(normalized_condition, bc_local_dict)
+            residual = _parse_residual_equation(
+                normalized_condition,
+                bc_local_dict,
+                display_text=condition,
+            )
             residual = cast(sp.Expr, residual.subs(left_subs))
             residual = cast(sp.Expr, residual.subs(right_subs))
 
@@ -431,7 +444,10 @@ class BVPProblem:
         if isinstance(initial_guess, Mapping):
             guess_map: dict[str, sp.Expr] = {}
             for key, value in initial_guess.items():
-                guess_map[key] = _parse_scalar_expr(value)
+                guess_map[key] = _parse_scalar_expr(
+                    value,
+                    context=f"BVP initial guess for '{key}'",
+                )
 
             missing = [
                 str(symbol)
@@ -454,7 +470,11 @@ class BVPProblem:
                 )
 
             guess_expressions = [
-                _parse_scalar_expr(expr) for expr in initial_guess
+                _parse_scalar_expr(
+                    expr,
+                    context=f"BVP initial guess expression '{expr}'",
+                )
+                for expr in initial_guess
             ]
 
         return cls(
@@ -796,6 +816,7 @@ def normalize_differential_notation(text: str) -> str:
 def _build_local_dict(
     normalized_equations: Sequence[str],
 ) -> dict[str, Any]:
+    """Build a SymPy parser local_dict from normalized equation text."""
     local_dict: dict[str, Any] = {
         "Derivative": sp.Derivative,
         "Eq": sp.Eq,
@@ -816,28 +837,35 @@ def _build_local_dict(
     return local_dict
 
 
-def _parse_equation(equation: str, local_dict: dict[str, Any]) -> sp.Equality:
-    if "=" in equation:
-        lhs_raw, rhs_raw = equation.split("=", 1)
-    else:
-        lhs_raw, rhs_raw = equation, "0"
+def _parse_equation(
+    equation: str,
+    local_dict: dict[str, Any],
+    display_text: str | None = None,
+) -> sp.Equality:
+    """Parse a single equation string into a SymPy Eq without evaluation."""
+    shown_text = equation if display_text is None else display_text
+    if "=" not in equation:
+        raise ValueError(
+            "ODE strings must be full equations containing '='. "
+            f"Got '{shown_text}'."
+        )
+    lhs_raw, rhs_raw = equation.split("=", 1)
 
-    lhs = parse_expr(
+    lhs = _parse_expr_with_context(
         lhs_raw,
         local_dict=local_dict,
-        transformations=TRANSFORMATIONS,
-        evaluate=False,
+        context=f"ODE equation LHS in '{shown_text}'",
     )
-    rhs = parse_expr(
+    rhs = _parse_expr_with_context(
         rhs_raw,
         local_dict=local_dict,
-        transformations=TRANSFORMATIONS,
-        evaluate=False,
+        context=f"ODE equation RHS in '{shown_text}'",
     )
     return cast(sp.Equality, sp.Eq(lhs, rhs, evaluate=False))
 
 
 def _extract_independent_variable(equations: Sequence[sp.Equality]) -> sp.Symbol:
+    """Extract the single independent variable used in all derivatives."""
     variables: set[sp.Symbol] = set()
     for equation in equations:
         for derivative in equation.atoms(sp.Derivative):
@@ -854,6 +882,7 @@ def _extract_independent_variable(equations: Sequence[sp.Equality]) -> sp.Symbol
 
 
 def _extract_target_functions(equations: Sequence[sp.Equality]) -> list[str]:
+    """Collect target function names from derivative terms in equations."""
     targets: set[str] = set()
     for equation in equations:
         for derivative in equation.atoms(sp.Derivative):
@@ -871,6 +900,7 @@ def _extract_target_functions(equations: Sequence[sp.Equality]) -> list[str]:
 
 
 def _highest_derivative_in_equation(equation: sp.Equality) -> sp.Derivative:
+    """Return the unique highest-order derivative term in an equation."""
     derivatives = sorted(
         equation.atoms(sp.Derivative),
         key=lambda item: len(item.variables),
@@ -889,44 +919,71 @@ def _highest_derivative_in_equation(equation: sp.Equality) -> sp.Derivative:
     return highest[0]
 
 
-def _parse_scalar_expr(expr_text: str) -> sp.Expr:
+def _parse_scalar_expr(expr_text: str, context: str) -> sp.Expr:
+    """Parse a scalar expression string into a SymPy expression."""
     local_dict: dict[str, Any] = {}
-    expr = parse_expr(
+    expr = _parse_expr_with_context(
         expr_text,
         local_dict=local_dict,
-        transformations=TRANSFORMATIONS,
-        evaluate=False,
+        context=context,
     )
     return cast(sp.Expr, expr)
 
 
-def _parse_residual_equation(equation: str, local_dict: dict[str, Any]) -> sp.Expr:
+def _parse_residual_equation(
+    equation: str,
+    local_dict: dict[str, Any],
+    display_text: str | None = None,
+) -> sp.Expr:
+    """Parse a residual equation, returning lhs - rhs if '=' is present."""
+    shown_text = equation if display_text is None else display_text
     if "=" in equation:
         lhs_raw, rhs_raw = equation.split("=", 1)
-        lhs_expr = parse_expr(
+        lhs_expr = _parse_expr_with_context(
             lhs_raw,
             local_dict=local_dict,
-            transformations=TRANSFORMATIONS,
-            evaluate=False,
+            context=f"boundary condition LHS in '{shown_text}'",
         )
-        rhs_expr = parse_expr(
+        rhs_expr = _parse_expr_with_context(
             rhs_raw,
             local_dict=local_dict,
-            transformations=TRANSFORMATIONS,
-            evaluate=False,
+            context=f"boundary condition RHS in '{shown_text}'",
         )
         return _expr_diff(cast(sp.Expr, lhs_expr), cast(sp.Expr, rhs_expr))
 
-    expr = parse_expr(
+    expr = _parse_expr_with_context(
         equation,
         local_dict=local_dict,
-        transformations=TRANSFORMATIONS,
-        evaluate=False,
+        context=f"boundary condition '{shown_text}'",
     )
+    return cast(sp.Expr, expr)
+
+
+def _parse_expr_with_context(
+    expr_text: str,
+    local_dict: dict[str, Any],
+    context: str,
+) -> sp.Expr:
+    """Parse an expression and re-raise with user-facing context."""
+    try:
+        expr = parse_expr(
+            expr_text,
+            local_dict=local_dict,
+            transformations=TRANSFORMATIONS,
+            evaluate=False,
+        )
+    except Exception as exc:  # pragma: no cover - depends on SymPy internals
+        exc_name = type(exc).__name__
+        raise ValueError(
+            f"Could not parse {context}. "
+            f"Use valid SymPy syntax and explicit multiplication like '2*x'. "
+            f"SymPy error: {exc_name}: {exc}"
+        ) from exc
     return cast(sp.Expr, expr)
 
 
 def _expr_diff(left: sp.Expr, right: sp.Expr) -> sp.Expr:
+    """Return a symbolic expression for left - right without evaluation."""
     return cast(
         sp.Expr,
         sp.Add(left, sp.Mul(sp.Integer(-1), right, evaluate=False), evaluate=False),
@@ -943,7 +1000,10 @@ def _parse_differential_system(
 
     normalized_equations = [normalize_differential_notation(eq) for eq in equations]
     local_dict = _build_local_dict(normalized_equations)
-    parsed_equations = [_parse_equation(eq, local_dict) for eq in normalized_equations]
+    parsed_equations = [
+        _parse_equation(eq_norm, local_dict, display_text=eq_raw)
+        for eq_raw, eq_norm in zip(equations, normalized_equations)
+    ]
 
     independent_variable = _extract_independent_variable(parsed_equations)
     target_functions = _extract_target_functions(parsed_equations)
@@ -967,10 +1027,6 @@ def _parse_differential_system(
         highest_derivatives=highest_derivatives,
         solved_highest_derivatives=solved_highest_derivatives,
     )
-
-
-
-
 
 
 def _decouple_to_first_order(system: ParsedDifferentialSystem) -> FirstOrderSystem:
@@ -1059,20 +1115,20 @@ def _decouple_to_first_order(system: ParsedDifferentialSystem) -> FirstOrderSyst
 
 
 def _expr_to_numpy_code(expr: sp.Expr) -> str:
+    """Render a SymPy expression as NumPy-compatible code."""
     printer = NumPyPrinter()
     return cast(str, printer.doprint(expr))
 
 
 def _state_symbol_to_function_order(state_symbol: sp.Symbol) -> tuple[str, int]:
+    """Split a state symbol name into function name and derivative order."""
     name = str(state_symbol)
     function_name, order_token = name.rsplit("_", 1)
     return function_name, int(order_token)
 
 
 def _function_derivative_text(function_name: str, derivative_order: int, independent: sp.Symbol) -> str:
+    """Return a human-readable f''(t) style label."""
     primes = "'" * derivative_order
     return f"{function_name}{primes}({independent})"
-
-
-
 
